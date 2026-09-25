@@ -1,0 +1,14 @@
+docker build -t cicd-first:latest .
+aws ecr get-login-password --region us-east-1 | \
+docker login \
+  --username AWS \
+  --password-stdin 462096274890.dkr.ecr.us-east-1.amazonaws.com
+  
+  
+  docker tag \
+  cicd-first:latest \
+  462096274890.dkr.ecr.us-east-1.amazonaws.com/cicd-first:latest
+  
+  
+  docker push \
+  462096274890.dkr.ecr.us-east-1.amazonaws.com/cicd-first:latest

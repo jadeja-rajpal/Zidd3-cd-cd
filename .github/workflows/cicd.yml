@@ -13,15 +13,9 @@ env:
 
 jobs:
 
-  # ==========================================
-  # CI
-  # ==========================================
   ci:
     name: Continuous Integration
     runs-on: ubuntu-latest
-
-    outputs:
-      image: ${{ steps.build.outputs.image }}
 
     steps:
 
@@ -39,19 +33,13 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build and Push Docker Image
-        id: build
         run: |
           IMAGE=$ECR_REGISTRY/$ECR_REPOSITORY:${GITHUB_SHA::7}
 
           docker build -t $IMAGE .
           docker push $IMAGE
 
-          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
 
-
-  # ==========================================
-  # CD
-  # ==========================================
   cd:
     name: Continuous Deployment
     runs-on: ubuntu-latest
@@ -77,8 +65,10 @@ jobs:
 
       - name: Deploy to EKS
         run: |
+          IMAGE=$ECR_REGISTRY/$ECR_REPOSITORY:${GITHUB_SHA::7}
+
           kubectl set image deployment/cicd-first \
-            cicd-first=${{ needs.ci.outputs.image }}
+            cicd-first=$IMAGE
 
       - name: Verify Deployment
         run: |
