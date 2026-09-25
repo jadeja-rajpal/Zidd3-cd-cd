@@ -59,18 +59,18 @@ jobs:
       # ------------------------------------------
       # Trivy - Container Security Scan
       # ------------------------------------------
-      - name: Setup Trivy
-        uses: aquasecurity/setup-trivy@v0.2.3
-
-      - name: Run Trivy Scan
-        run: |
-          IMAGE=$ECR_REGISTRY/$ECR_REPOSITORY:${GITHUB_SHA::7}
-
-          trivy image \
-            --exit-code 1 \
-            --ignore-unfixed \
-            --severity HIGH,CRITICAL \
-            $IMAGE
+      - name: Set Image Tag
+        run: echo "IMAGE_TAG=${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+      
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: '${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}'
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'      
 
       # ------------------------------------------
       # Push Image to ECR
