@@ -13,6 +13,9 @@ env:
 
 jobs:
 
+  # ==========================================
+  # CI
+  # ==========================================
   ci:
     name: Continuous Integration
     runs-on: ubuntu-latest
@@ -22,6 +25,15 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      # ------------------------------------------
+      # Gitleaks - Secret Scanning
+      # ------------------------------------------
+      - name: Run Gitleaks Scan
+        uses: gitleaks/gitleaks-action@v2
+
+      # ------------------------------------------
+      # Configure AWS
+      # ------------------------------------------
       - name: Configure AWS
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -29,17 +41,47 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
+      # ------------------------------------------
+      # Login to ECR
+      # ------------------------------------------
       - name: Login to ECR
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build and Push Docker Image
+      # ------------------------------------------
+      # Build Docker Image
+      # ------------------------------------------
+      - name: Build Docker Image
         run: |
           IMAGE=$ECR_REGISTRY/$ECR_REPOSITORY:${GITHUB_SHA::7}
 
           docker build -t $IMAGE .
+
+      # ------------------------------------------
+      # Trivy - Container Security Scan
+      # ------------------------------------------
+      - name: Run Trivy Scan
+        run: |
+          IMAGE=$ECR_REGISTRY/$ECR_REPOSITORY:${GITHUB_SHA::7}
+
+          trivy image \
+            --exit-code 1 \
+            --ignore-unfixed \
+            --severity HIGH,CRITICAL \
+            $IMAGE
+
+      # ------------------------------------------
+      # Push Image to ECR
+      # ------------------------------------------
+      - name: Push Docker Image
+        run: |
+          IMAGE=$ECR_REGISTRY/$ECR_REPOSITORY:${GITHUB_SHA::7}
+
           docker push $IMAGE
 
 
+  # ==========================================
+  # CD
+  # ==========================================
   cd:
     name: Continuous Deployment
     runs-on: ubuntu-latest
@@ -50,6 +92,9 @@ jobs:
 
     steps:
 
+      # ------------------------------------------
+      # Configure AWS
+      # ------------------------------------------
       - name: Configure AWS
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -57,12 +102,18 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
+      # ------------------------------------------
+      # Configure kubectl
+      # ------------------------------------------
       - name: Configure kubectl
         run: |
           aws eks update-kubeconfig \
             --region $AWS_REGION \
             --name $EKS_CLUSTER
 
+      # ------------------------------------------
+      # Deploy to EKS
+      # ------------------------------------------
       - name: Deploy to EKS
         run: |
           IMAGE=$ECR_REGISTRY/$ECR_REPOSITORY:${GITHUB_SHA::7}
@@ -70,6 +121,10 @@ jobs:
           kubectl set image deployment/cicd-first \
             cicd-first=$IMAGE
 
+      # ------------------------------------------
+      # Verify Deployment
+      # ------------------------------------------
       - name: Verify Deployment
         run: |
           kubectl rollout status deployment/cicd-first --timeout=5m
+
