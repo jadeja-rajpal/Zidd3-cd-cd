@@ -1,0 +1,63 @@
+name: CI-CD
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: cicd-first
+  EKS_CLUSTER: zidd-3
+  ECR_REGISTRY: 462096274890.dkr.ecr.us-east-1.amazonaws.com
+
+jobs:
+
+  # ==========================================
+  # CI
+  # ==========================================
+  ci:
+    name: Continuous Integration
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # ------------------------------------------
+      # Configure AWS
+      # ------------------------------------------
+      - name: Configure AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # ------------------------------------------
+      # Login to ECR
+      # ------------------------------------------
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # ------------------------------------------
+      # Build Docker Image
+      # ------------------------------------------
+      - name: Build Docker Image
+        run: |
+          IMAGE=$ECR_REGISTRY/$ECR_REPOSITORY:${GITHUB_SHA::7}
+
+          docker build -t $IMAGE .
+
+
+      # ------------------------------------------
+      # Push Image to ECR
+      # ------------------------------------------
+      - name: Push Docker Image
+        run: |
+          IMAGE=$ECR_REGISTRY/$ECR_REPOSITORY:${GITHUB_SHA::7}
+
+          docker push $IMAGE
+
+

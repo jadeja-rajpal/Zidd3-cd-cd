@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: cicd-first
-          image: 462096274890.dkr.ecr.us-east-1.amazonaws.com/cicd-first:latest
+          image: 462096274890.dkr.ecr.us-east-1.amazonaws.com/cicd-first:v2
           ports:
             - containerPort: 3000
           resources:
