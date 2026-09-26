@@ -12,3 +12,7 @@ docker login \
   
   docker push \
   462096274890.dkr.ecr.us-east-1.amazonaws.com/cicd-first:latest
+
+
+
+hi
