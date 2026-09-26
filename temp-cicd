@@ -1,0 +1,133 @@
+name: CI-CD
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: cicd-first
+  EKS_CLUSTER: zidd-3
+  ECR_REGISTRY: 462096274890.dkr.ecr.us-east-1.amazonaws.com
+
+jobs:
+
+  # ==========================================
+  # CI
+  # ==========================================
+  ci:
+    name: Continuous Integration
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # ------------------------------------------
+      # Gitleaks - Secret Scanning
+      # ------------------------------------------
+      - name: Run Gitleaks Scan
+        uses: gitleaks/gitleaks-action@v2
+
+      # ------------------------------------------
+      # Configure AWS
+      # ------------------------------------------
+      - name: Configure AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # ------------------------------------------
+      # Login to ECR
+      # ------------------------------------------
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # ------------------------------------------
+      # Build Docker Image
+      # ------------------------------------------
+      - name: Build Docker Image
+        run: |
+          IMAGE=$ECR_REGISTRY/$ECR_REPOSITORY:${GITHUB_SHA::7}
+
+          docker build -t $IMAGE .
+
+      # ------------------------------------------
+      # Trivy - Container Security Scan
+      # ------------------------------------------
+      - name: Set Image Tag
+        run: echo "IMAGE_TAG=${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+      
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: '${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}'
+          format: 'table'
+          exit-code: '0'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'      
+
+      # ------------------------------------------
+      # Push Image to ECR
+      # ------------------------------------------
+      - name: Push Docker Image
+        run: |
+          IMAGE=$ECR_REGISTRY/$ECR_REPOSITORY:${GITHUB_SHA::7}
+
+          docker push $IMAGE
+
+
+  # ==========================================
+  # CD
+  # ==========================================
+  cd:
+    name: Continuous Deployment
+    runs-on: ubuntu-latest
+
+    needs: ci
+
+    environment: production
+
+    steps:
+
+      # ------------------------------------------
+      # Configure AWS
+      # ------------------------------------------
+      - name: Configure AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # ------------------------------------------
+      # Configure kubectl
+      # ------------------------------------------
+      - name: Configure kubectl
+        run: |
+          aws eks update-kubeconfig \
+            --region $AWS_REGION \
+            --name $EKS_CLUSTER
+
+      # ------------------------------------------
+      # Deploy to EKS
+      # ------------------------------------------
+      - name: Deploy to EKS
+        run: |
+          IMAGE=$ECR_REGISTRY/$ECR_REPOSITORY:${GITHUB_SHA::7}
+
+          kubectl set image deployment/cicd-first \
+            cicd-first=$IMAGE
+
+      # ------------------------------------------
+      # Verify Deployment
+      # ------------------------------------------
+      - name: Verify Deployment
+        run: |
+          kubectl rollout status deployment/cicd-first --timeout=5m
+
